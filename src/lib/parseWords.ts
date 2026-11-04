@@ -129,6 +129,21 @@ export async function parseWorkbook(buffer: ArrayBuffer): Promise<Word[]> {
   return words;
 }
 
+export async function parseCsv(text: string): Promise<Word[]> {
+  const XLSX = await import('xlsx');
+  // CSV 必须按字符串读入，否则中文表头会被按 ANSI 解码成乱码
+  const workbook = XLSX.read(text, { type: 'string' });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) throw new Error('CSV 中没有有效内容');
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], {
+    header: 1,
+    defval: ''
+  });
+  const words = rowsToWords(rows);
+  if (words.length === 0) throw new Error('没有解析到有效单词，请检查表格列顺序');
+  return words;
+}
+
 export async function parseWordFile(file: File): Promise<Word[]> {
   const lower = file.name.toLowerCase();
   if (lower.endsWith('.json')) {
@@ -137,7 +152,10 @@ export async function parseWordFile(file: File): Promise<Word[]> {
     if (words.length === 0) throw new Error('JSON 中没有有效单词');
     return words;
   }
-  if (lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.csv')) {
+  if (lower.endsWith('.csv')) {
+    return await parseCsv(await file.text());
+  }
+  if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
     return await parseWorkbook(await file.arrayBuffer());
   }
   throw new Error('仅支持 .xlsx / .xls / .csv / .json 文件');
@@ -151,6 +169,9 @@ export async function parseWordUrl(url: string): Promise<Word[]> {
     const words = parseJsonWords(await response.json());
     if (words.length === 0) throw new Error('JSON 中没有有效单词');
     return words;
+  }
+  if (lower.endsWith('.csv')) {
+    return await parseCsv(await response.text());
   }
   return await parseWorkbook(await response.arrayBuffer());
 }

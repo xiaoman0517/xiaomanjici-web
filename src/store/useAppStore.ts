@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { buildLanguages } from '../data/fallback';
+import { chooseDefaultVoice } from '../lib/language';
 import { initialQuiz } from '../lib/quizEngine';
 import type { Language, QuizState, Settings, Voice, Word } from '../types';
 
@@ -15,6 +16,7 @@ interface AppStore {
   allVoices: Voice[];
   voices: Voice[];
   voicesLoaded: boolean;
+  voiceByLanguage: Record<string, string>;
 
   history: Word[];
   quiz: QuizState;
@@ -71,6 +73,7 @@ export const useAppStore = create<AppStore>()(
       allVoices: [],
       voices: [],
       voicesLoaded: false,
+      voiceByLanguage: { 'en-US': 'Joanna' },
 
       history: [],
       quiz: { ...initialQuiz },
@@ -133,14 +136,14 @@ export const useAppStore = create<AppStore>()(
           ? state.settings.languageCode
           : languages.find((item) => item.code === 'en-US')?.code || languages[0]?.code || 'en-US';
         const voices = allVoices.filter((voice) => voice.LanguageCode === languageCode);
-        const voiceId = voices.some((voice) => voice.Id === state.settings.voiceId)
-          ? state.settings.voiceId
-          : voices[0]?.Id || '';
+        const savedVoice = state.voiceByLanguage[languageCode] || state.settings.voiceId;
+        const voiceId = chooseDefaultVoice(voices, languageCode, savedVoice);
         set({
           allVoices,
           languages,
           voices,
           voicesLoaded: true,
+          voiceByLanguage: { ...state.voiceByLanguage, [languageCode]: voiceId },
           settings: { ...state.settings, languageCode, voiceId }
         });
       },
@@ -148,16 +151,20 @@ export const useAppStore = create<AppStore>()(
       setLanguage: (code) => {
         const state = get();
         const voices = state.allVoices.filter((voice) => voice.LanguageCode === code);
-        const voiceId = voices.some((voice) => voice.Id === state.settings.voiceId)
-          ? state.settings.voiceId
-          : voices[0]?.Id || '';
+        const savedVoice = state.voiceByLanguage[code] || state.settings.voiceId;
+        const voiceId = chooseDefaultVoice(voices, code, savedVoice);
         set({
           voices,
+          voiceByLanguage: { ...state.voiceByLanguage, [code]: voiceId },
           settings: { ...state.settings, languageCode: code, voiceId }
         });
       },
 
-      setVoice: (id) => set((state) => ({ settings: { ...state.settings, voiceId: id } })),
+      setVoice: (id) =>
+        set((state) => ({
+          voiceByLanguage: { ...state.voiceByLanguage, [state.settings.languageCode]: id },
+          settings: { ...state.settings, voiceId: id }
+        })),
 
       addHistory: (words) =>
         set((state) => {
@@ -185,7 +192,8 @@ export const useAppStore = create<AppStore>()(
           masteredCount: 0,
           history: [],
           quiz: { ...initialQuiz },
-          settings: defaultSettings
+          settings: defaultSettings,
+          voiceByLanguage: { 'en-US': 'Joanna' }
         })
     }),
     {
@@ -202,6 +210,7 @@ export const useAppStore = create<AppStore>()(
         allVoices: state.allVoices,
         voices: state.voices,
         voicesLoaded: state.voicesLoaded,
+        voiceByLanguage: state.voiceByLanguage,
         history: state.history,
         quiz: state.quiz
       })

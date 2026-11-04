@@ -166,7 +166,10 @@ export default function DiscoverPage() {
         });
       } else {
         const XLSX = await import('xlsx');
-        const workbook = XLSX.read(bytes, { type: 'array' });
+        const isCsv = entry.fileName.toLowerCase().endsWith('.csv');
+        const workbook = isCsv
+          ? XLSX.read(new TextDecoder().decode(bytes), { type: 'string' })
+          : XLSX.read(bytes, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
         const compact = rows
