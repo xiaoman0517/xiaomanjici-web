@@ -155,7 +155,7 @@ export default function DiscoverPage() {
     }
     setPreviewLoading(true);
     try {
-      const data = await downloadResource(key);
+      const data = await downloadResource(key, entry.downloadUrl);
       const bytes = base64ToBytes(data.data);
       const lower = entry.fileName.toLowerCase();
       if (lower.endsWith('.json')) {
@@ -193,7 +193,7 @@ export default function DiscoverPage() {
     }
     try {
       toast('正在准备下载…');
-      const data = await downloadResource(key);
+      const data = await downloadResource(key, entry.downloadUrl);
       const bytes = base64ToBytes(data.data);
       const lower = entry.fileName.toLowerCase();
       const type = lower.endsWith('.json')

@@ -97,6 +97,7 @@ export default function StudyPage() {
     const next = settings.randomMode
       ? Math.floor(Math.random() * words.length)
       : (currentIndex + delta + words.length) % words.length;
+    currentIndexRef.current = next;
     setCurrentIndex(next);
   };
 
@@ -151,7 +152,12 @@ export default function StudyPage() {
         const next = settingsRef.current.randomMode
           ? Math.floor(Math.random() * latest.length)
           : (latestIndex + 1) % latest.length;
+
+        // 关键：立即更新 ref，避免下一轮循环仍读到旧索引，造成“卡片已切换但还在播上一个词”
+        currentIndexRef.current = next;
         setCurrentIndex(next);
+        // 让 React 先完成卡片切换，再进入下一轮播放，保证画面和声音同步
+        await sleep(24);
       }
     };
 

@@ -110,14 +110,15 @@ export async function fetchAllWordLists(
   return merged;
 }
 
-export async function downloadResource(key: string) {
+export async function downloadResource(key: string, downloadUrl?: string) {
   return postJson<{
     success: boolean;
     data: string;
     fileName: string;
     contentType?: string;
     size?: number;
-  }>('/api/download-resource', { key });
+    source?: string;
+  }>('/api/download-resource', { key, downloadUrl });
 }
 
 export async function uploadResource(payload: {

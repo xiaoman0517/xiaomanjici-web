@@ -85,3 +85,14 @@ export function handleError(error: unknown) {
   const message = error instanceof Error ? error.message : '服务器内部错误';
   return json({ success: false, error: message }, status);
 }
+
+
+/** Edge Runtime 下把二进制转 base64，分块避免大文件栈溢出。 */
+export function bytesToBase64(bytes: Uint8Array) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}

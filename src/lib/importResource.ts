@@ -7,7 +7,7 @@ export async function parseWordListResource(entry: WordListEntry): Promise<Word[
   const key = entry.s3Key || entry.key || '';
   if (!key) throw new Error('该词表缺少可下载的对象键');
 
-  const data = await downloadResource(key);
+  const data = await downloadResource(key, entry.downloadUrl);
   if (!data.data) throw new Error('下载接口没有返回文件内容');
 
   const bytes = base64ToBytes(data.data);
