@@ -1,16 +1,45 @@
+import { useAppStore } from '../store/useAppStore';
+
+const SILENT_WAV =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+
 const audioCache = new Map<string, string>();
-let currentAudio: HTMLAudioElement | null = null;
+let audioEl: HTMLAudioElement | null = null;
 let currentResolve: (() => void) | null = null;
+
+function getAudioElement() {
+  if (!audioEl) {
+    audioEl = new Audio();
+    audioEl.preload = 'auto';
+  }
+  return audioEl;
+}
+
+/**
+ * iOS Safari / Chrome 的自动播放限制：
+ * 必须在用户手势的同步阶段先 play 一次音频元素，后续异步设置 src 才能播放。
+ */
+export async function primeAudio() {
+  const audio = getAudioElement();
+  try {
+    audio.src = SILENT_WAV;
+    audio.volume = 0;
+    await audio.play().catch(() => undefined);
+    audio.pause();
+    audio.currentTime = 0;
+    audio.volume = 1;
+  } catch {
+    // 忽略：没有用户手势时解锁失败，后续仍会尝试播放
+  }
+}
 
 function finishCurrent() {
   const resolve = currentResolve;
   currentResolve = null;
-  if (currentAudio) {
-    currentAudio.onended = null;
-    currentAudio.onerror = null;
-    currentAudio.pause();
-    currentAudio.src = '';
-    currentAudio = null;
+  if (audioEl) {
+    audioEl.onended = null;
+    audioEl.onerror = null;
+    audioEl.pause();
   }
   resolve?.();
 }
@@ -22,32 +51,44 @@ export function stopAudio() {
   }
 }
 
+function pickEngine(voiceId: string) {
+  const voice = useAppStore.getState().allVoices.find((item) => item.Id === voiceId);
+  const engines = voice?.SupportedEngines || [];
+  if (engines.includes('neural')) return 'neural';
+  if (engines.includes('standard')) return 'standard';
+  return 'standard';
+}
+
 async function synthesize(text: string, voiceId: string, languageCode: string) {
-  const key = `${voiceId}|${languageCode}|${text}`;
+  const engine = pickEngine(voiceId);
+  const key = `${voiceId}|${languageCode}|${engine}|${text}`;
   const cached = audioCache.get(key);
   if (cached) return cached;
 
   const response = await fetch('/api/synthesize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, voiceId, languageCode })
+    body: JSON.stringify({ text, voiceId, languageCode, engine, outputFormat: 'mp3' })
   });
 
   if (!response.ok) {
-    const message = await response.text().catch(() => '');
-    throw new Error(message || `TTS HTTP ${response.status}`);
+    const body = await response.text().catch(() => '');
+    throw new Error(body || `TTS HTTP ${response.status}`);
   }
 
   const data = (await response.json()) as {
     audioBase64?: string;
     audioUrl?: string;
     data?: string;
+    audioContent?: string;
   };
   const url = data.audioBase64
     ? `data:audio/mpeg;base64,${data.audioBase64}`
-    : data.data
-      ? `data:audio/mpeg;base64,${data.data}`
-      : data.audioUrl || '';
+    : data.audioContent
+      ? `data:audio/mpeg;base64,${data.audioContent}`
+      : data.data
+        ? `data:audio/mpeg;base64,${data.data}`
+        : data.audioUrl || '';
   if (!url) throw new Error('后端未返回音频数据');
   if (audioCache.size > 120) audioCache.clear();
   audioCache.set(key, url);
@@ -56,19 +97,22 @@ async function synthesize(text: string, voiceId: string, languageCode: string) {
 
 function playUrl(url: string): Promise<void> {
   return new Promise((resolve) => {
-    stopAudio();
-    const audio = new Audio(url);
-    currentAudio = audio;
+    const audio = getAudioElement();
+    finishCurrent();
+    audio.onended = null;
+    audio.onerror = null;
+    audio.src = url;
+    audio.currentTime = 0;
     currentResolve = resolve;
 
     const done = () => {
-      if (currentAudio === audio) finishCurrent();
+      if (currentResolve === resolve) finishCurrent();
       else resolve();
     };
 
     audio.onended = done;
     audio.onerror = done;
-    audio.play().catch(done);
+    void audio.play().catch(done);
   });
 }
 
@@ -97,7 +141,10 @@ function speakFallback(text: string, languageCode: string): Promise<void> {
 export async function playText(text: string, languageCode: string, voiceId: string): Promise<void> {
   const value = text.trim();
   if (!value) return;
+
   stopAudio();
+  await primeAudio();
+
   if (voiceId && languageCode) {
     try {
       const url = await synthesize(value, voiceId, languageCode);

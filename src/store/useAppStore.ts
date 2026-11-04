@@ -121,7 +121,12 @@ export const useAppStore = create<AppStore>()(
       updateSettings: (patch) =>
         set((state) => ({ settings: { ...state.settings, ...patch } })),
 
-      applyCatalog: (allVoices) => {
+      applyCatalog: (rawVoices) => {
+        // 过滤掉只支持 generative 等当前合成接口未覆盖的音色
+        const allVoices = rawVoices.filter((voice) => {
+          const engines = voice.SupportedEngines || [];
+          return engines.length === 0 || engines.includes('neural') || engines.includes('standard');
+        });
         const languages = buildLanguages(allVoices);
         const state = get();
         const languageCode = languages.some((item) => item.code === state.settings.languageCode)
