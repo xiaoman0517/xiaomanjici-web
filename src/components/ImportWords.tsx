@@ -24,7 +24,7 @@ import {
   resolveLanguageCode,
   type LanguageDetection
 } from '../lib/language';
-import { fileNameFromUrl, parseWordFile, parseWordUrl } from '../lib/parseWords';
+import { fileNameFromUrl, parseWordFile, parseWordUrl, type FirstRowMode } from '../lib/parseWords';
 import { formatDate, formatFileSize } from '../lib/utils';
 import { useAppStore } from '../store/useAppStore';
 import type { Word, WordListEntry } from '../types';
@@ -57,6 +57,7 @@ export function ImportWords({
   const toast = useToast();
 
   const [tab, setTab] = useState<Tab>('local');
+  const [firstRowMode, setFirstRowMode] = useState<FirstRowMode>('auto');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -110,7 +111,7 @@ export function ImportWords({
   const loadFile = async (file: File) => {
     setBusy(true);
     try {
-      const words = await parseWordFile(file);
+      const words = await parseWordFile(file, { firstRowMode });
       detectAndPrepare(words, file.name);
     } catch (error) {
       toast((error as Error).message || '文件解析失败', 'error');
@@ -131,7 +132,7 @@ export function ImportWords({
     }
     setBusy(true);
     try {
-      const words = await parseWordUrl(value);
+      const words = await parseWordUrl(value, { firstRowMode });
       detectAndPrepare(words, fileNameFromUrl(value));
       setUrl('');
     } catch (error) {
@@ -173,7 +174,7 @@ export function ImportWords({
     const key = entry.s3Key || entry.key || entry.fileName;
     setImportingKey(key);
     try {
-      const words = await parseWordListResource(entry);
+      const words = await parseWordListResource(entry, { firstRowMode });
       detectAndPrepare(words, entry.fileName, languageFromCategory(resourceCategory));
     } catch (error) {
       toast((error as Error).message || '词表导入失败', 'error');
@@ -313,6 +314,22 @@ export function ImportWords({
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/80 bg-white/50 px-3 py-2">
+        <div>
+          <p className="text-[11px] font-black text-[#6b6478]">首行处理</p>
+          <p className="text-[10px] font-semibold text-[#a398ae]">列名不参与映射，按第 1~5 列顺序读取</p>
+        </div>
+        <select
+          className="select-field w-auto py-1.5 text-xs"
+          value={firstRowMode}
+          onChange={(event) => setFirstRowMode(event.target.value as FirstRowMode)}
+        >
+          <option value="auto">自动识别表头</option>
+          <option value="header">首行是表头</option>
+          <option value="data">首行是数据</option>
+        </select>
+      </div>
+
       {tab === 'local' ? (
         <>
           <div
@@ -348,7 +365,7 @@ export function ImportWords({
             <p className="mt-1 text-xs font-semibold leading-relaxed text-[#9b90a7]">
               支持 .xlsx / .xls / .csv / .json
               <br />
-              表格建议 5 列：单词、音标、释义、例句、例句翻译
+              列名可自定义，按第 1~5 列顺序读取：单词、音标、释义、例句、例句翻译
             </p>
             <input
               ref={fileRef}
